@@ -162,7 +162,7 @@ static NSString *RCTRecursiveAccessibilityLabel(RCTUIView *view) // TODO(macOS I
     _borderBottomEndRadius = -1;
     _borderStyle = RCTBorderStyleSolid;
     _hitTestEdgeInsets = UIEdgeInsetsZero;
-
+    _transform3D = CATransform3DIdentity;
     _backgroundColor = super.backgroundColor;
   }
 
@@ -742,16 +742,16 @@ RCT_NOT_IMPLEMENTED(-(instancetype)initWithCoder : unused)
   // the mouseExited: event does not get called on the view where mouseEntered: was previously called.
   // This creates an unnatural pairing of mouse enter and exit events and can cause problems.
   // We therefore explicitly check for this here and handle them by calling the appropriate callbacks.
-  
+
   if (!_hasMouseOver && self.onMouseEnter)
   {
     NSPoint locationInWindow = [[self window] mouseLocationOutsideOfEventStream];
     NSPoint locationInView = [self convertPoint:locationInWindow fromView:nil];
-    
+
     if (NSPointInRect(locationInView, [self bounds]))
     {
       _hasMouseOver = YES;
-      
+
       [self sendMouseEventWithBlock:self.onMouseEnter
                        locationInfo:[self locationInfoFromDraggingLocation:locationInWindow]
                       modifierFlags:0
@@ -762,11 +762,11 @@ RCT_NOT_IMPLEMENTED(-(instancetype)initWithCoder : unused)
   {
     NSPoint locationInWindow = [[self window] mouseLocationOutsideOfEventStream];
     NSPoint locationInView = [self convertPoint:locationInWindow fromView:nil];
-    
+
     if (!NSPointInRect(locationInView, [self bounds]))
     {
       _hasMouseOver = NO;
-      
+
       [self sendMouseEventWithBlock:self.onMouseLeave
                        locationInfo:[self locationInfoFromDraggingLocation:locationInWindow]
                       modifierFlags:0
@@ -1130,7 +1130,7 @@ static CGFloat RCTDefaultIfNegativeTo(CGFloat defaultValue, CGFloat x)
   }
 
   RCTUpdateShadowPathForView(self);
-  
+
 #if TARGET_OS_OSX // [TODO(macOS ISS#2323203)
   // clipsToBounds is stubbed out on macOS because it's not part of NSView
   layer.masksToBounds = self.clipsToBounds;
@@ -1163,6 +1163,18 @@ static CGFloat RCTDefaultIfNegativeTo(CGFloat defaultValue, CGFloat x)
 #else
   backgroundColor = _backgroundColor.CGColor;
 #endif
+
+   #if TARGET_OS_OSX // [TODO(macOS ISS#2323203)
+    CATransform3D transform = self.transform3D;
+    if (layer.anchorPoint.x == 0 && layer.anchorPoint.y == 0 && !CATransform3DEqualToTransform(transform, CATransform3DIdentity)) {
+      // This compensates for the fact that layer.anchorPoint is {0, 0} instead of {0.5, 0.5} on macOS for some reason.
+      CATransform3D originAdjust = CATransform3DTranslate(CATransform3DIdentity, self.frame.size.width / 2, self.frame.size.height / 2, 0);
+      transform = CATransform3DConcat(CATransform3DConcat(CATransform3DInvert(originAdjust), transform), originAdjust);
+      // Enable edge antialiasing in perspective transforms
+      layer.allowsEdgeAntialiasing = !(transform.m34 == 0.0f);
+    }
+    layer.transform = transform;
+    #endif // ]TODO(macOS ISS#2323203)
 
   if (useIOSBorderRendering) {
     layer.cornerRadius = cornerRadii.topLeft;
@@ -1420,7 +1432,7 @@ setBorderColor() setBorderColor(Top) setBorderColor(Right) setBorderColor(Bottom
   if (_trackingArea) {
     [self removeTrackingArea:_trackingArea];
   }
-  
+
   if (self.onMouseEnter || self.onMouseLeave) {
     _trackingArea = [[NSTrackingArea alloc] initWithRect:self.bounds
                                                  options:NSTrackingActiveAlways|NSTrackingMouseEnteredAndExited
@@ -1428,7 +1440,7 @@ setBorderColor() setBorderColor(Top) setBorderColor(Right) setBorderColor(Bottom
                                                 userInfo:nil];
     [self addTrackingArea:_trackingArea];
   }
-  
+
   [super updateTrackingAreas];
 }
 
@@ -1454,7 +1466,7 @@ setBorderColor() setBorderColor(Top) setBorderColor(Right) setBorderColor(Bottom
 {
   NSPoint locationInWindow = event.locationInWindow;
   NSPoint locationInView = [self convertPoint:locationInWindow fromView:nil];
-  
+
   return @{@"screenX": @(locationInWindow.x),
            @"screenY": @(locationInWindow.y),
            @"clientX": @(locationInView.x),
@@ -1470,9 +1482,9 @@ setBorderColor() setBorderColor(Top) setBorderColor(Right) setBorderColor(Bottom
   if (block == nil) {
     return;
   }
-  
+
   NSMutableDictionary *body = [[NSMutableDictionary alloc] init];
-  
+
   if (modifierFlags & NSEventModifierFlagShift) {
     body[@"shiftKey"] = @YES;
   }
@@ -1485,15 +1497,15 @@ setBorderColor() setBorderColor(Top) setBorderColor(Right) setBorderColor(Bottom
   if (modifierFlags & NSEventModifierFlagCommand) {
     body[@"metaKey"] = @YES;
   }
-  
+
   if (locationInfo) {
     [body addEntriesFromDictionary:locationInfo];
   }
-  
+
   if (additionalData) {
     [body addEntriesFromDictionary:additionalData];
   }
-  
+
   block(body);
 }
 
@@ -1502,7 +1514,7 @@ setBorderColor() setBorderColor(Top) setBorderColor(Right) setBorderColor(Bottom
   if (![pastboard.types containsObject:NSFilenamesPboardType]) {
     return @{};
   }
-  
+
   NSArray *fileNames = [pastboard propertyListForType:NSFilenamesPboardType];
   NSMutableArray *files = [[NSMutableArray alloc] initWithCapacity:fileNames.count];
   NSMutableArray *items = [[NSMutableArray alloc] initWithCapacity:fileNames.count];
@@ -1512,7 +1524,7 @@ setBorderColor() setBorderColor(Top) setBorderColor(Right) setBorderColor(Bottom
     BOOL isDir = NO;
     BOOL isValid = (![[NSFileManager defaultManager] fileExistsAtPath:fileURL.path isDirectory:&isDir] || isDir) ? NO : YES;
     if (isValid) {
-      
+
       NSString *MIMETypeString = nil;
       if (fileURL.pathExtension) {
         CFStringRef fileExtension = (__bridge CFStringRef)fileURL.pathExtension;
@@ -1523,27 +1535,27 @@ setBorderColor() setBorderColor(Top) setBorderColor(Right) setBorderColor(Bottom
           MIMETypeString = (__bridge_transfer NSString *)MIMEType;
         }
       }
-      
+
       NSNumber *fileSizeValue = nil;
       NSError *fileSizeError = nil;
       BOOL success = [fileURL getResourceValue:&fileSizeValue
                                         forKey:NSURLFileSizeKey
                                          error:&fileSizeError];
-      
+
       [files addObject:@{@"name": RCTNullIfNil(fileURL.lastPathComponent),
                          @"type": RCTNullIfNil(MIMETypeString),
                          @"uri": RCTNullIfNil(fileURL.absoluteString),
                          @"size": success ? fileSizeValue : (id)kCFNull
                          }];
-      
+
       [items addObject:@{@"kind": @"file",
                          @"type": RCTNullIfNil(MIMETypeString),
                          }];
-      
+
       [types addObject:RCTNullIfNil(MIMETypeString)];
     }
   }
-  
+
   return @{@"dataTransfer": @{@"files": files,
                               @"items": items,
                               @"types": types}};
@@ -1552,7 +1564,7 @@ setBorderColor() setBorderColor(Top) setBorderColor(Right) setBorderColor(Bottom
 - (NSDictionary*)locationInfoFromDraggingLocation:(NSPoint)locationInWindow
 {
   NSPoint locationInView = [self convertPoint:locationInWindow fromView:nil];
-  
+
   return @{@"screenX": @(locationInWindow.x),
            @"screenY": @(locationInWindow.y),
            @"clientX": @(locationInView.x),
@@ -1564,12 +1576,12 @@ setBorderColor() setBorderColor(Top) setBorderColor(Right) setBorderColor(Bottom
 {
   NSPasteboard *pboard = sender.draggingPasteboard;
   NSDragOperation sourceDragMask = sender.draggingSourceOperationMask;
-  
+
   [self sendMouseEventWithBlock:self.onDragEnter
                    locationInfo:[self locationInfoFromDraggingLocation:sender.draggingLocation]
                   modifierFlags:0
                  additionalData:[self dataTransferInfoFromPastboard:pboard]];
-  
+
   if ([pboard.types containsObject:NSFilenamesPboardType]) {
     if (sourceDragMask & NSDragOperationLink) {
       return NSDragOperationLink;
@@ -1621,7 +1633,6 @@ NSString* const downArrowPressKey = @"ArrowDown";
   BOOL rightArrowKey = NO;
   BOOL upArrowKey = NO;
   BOOL downArrowKey = NO;
-  BOOL tabKeyPressed = NO;
   BOOL escapeKeyPressed = NO;
   NSString *key = event.charactersIgnoringModifiers;
   unichar const code = [key characterAtIndex:0];
@@ -1636,17 +1647,10 @@ NSString* const downArrowPressKey = @"ArrowDown";
   } else if (code == NSDownArrowFunctionKey) {
     downArrowKey = YES;
   }
-  
-  // detect special key presses via the key code
-  switch (event.keyCode) {
-    case 48: // Tab
-      tabKeyPressed = YES;
-      break;
-    case 53: // Escape
-      escapeKeyPressed = YES;
-      break;
-    default:
-      break;
+
+  // detect Escape key presses via the key code
+  if (event.keyCode == 53) {
+    escapeKeyPressed = YES;
   }
 
   // detect modifier flags
@@ -1671,7 +1675,7 @@ NSString* const downArrowPressKey = @"ArrowDown";
   RCTViewKeyboardEvent *keyboardEvent = nil;
   // only post events for keys we care about
   if (downPress) {
-    NSString *keyToReturn = [self keyIsValid:key left:leftArrowKey right:rightArrowKey up:upArrowKey down:downArrowKey tabKey:tabKeyPressed escapeKey:escapeKeyPressed validKeys:[self validKeysDown]];
+    NSString *keyToReturn = [self keyIsValid:key left:leftArrowKey right:rightArrowKey up:upArrowKey down:downArrowKey escapeKey:escapeKeyPressed validKeys:[self validKeysDown]];
     if (keyToReturn != nil) {
       keyboardEvent = [RCTViewKeyboardEvent keyDownEventWithReactTag:self.reactTag
                                                          capsLockKey:capsLockKey
@@ -1689,7 +1693,7 @@ NSString* const downArrowPressKey = @"ArrowDown";
                                                                  key:keyToReturn];
     }
   } else {
-    NSString *keyToReturn = [self keyIsValid:key left:leftArrowKey right:rightArrowKey up:upArrowKey down:downArrowKey tabKey:tabKeyPressed escapeKey:escapeKeyPressed validKeys:[self validKeysUp]];
+    NSString *keyToReturn = [self keyIsValid:key left:leftArrowKey right:rightArrowKey up:upArrowKey down:downArrowKey escapeKey:escapeKeyPressed validKeys:[self validKeysUp]];
     if (keyToReturn != nil) {
       keyboardEvent = [RCTViewKeyboardEvent keyUpEventWithReactTag:self.reactTag
                                                        capsLockKey:capsLockKey
@@ -1712,21 +1716,18 @@ NSString* const downArrowPressKey = @"ArrowDown";
 
 // check if the user typed key matches a key we need to send an event for
 // translate key codes over to JS compatible keys
-- (NSString*)keyIsValid:(NSString*)key left:(BOOL)leftArrowPressed right:(BOOL)rightArrowPressed up:(BOOL)upArrowPressed down:(BOOL)downArrowPressed tabKey:(BOOL)tabKeyPressed escapeKey:(BOOL)escapeKeyPressed validKeys:(NSArray<NSString*>*)validKeys {
+- (NSString*)keyIsValid:(NSString*)key left:(BOOL)leftArrowPressed right:(BOOL)rightArrowPressed up:(BOOL)upArrowPressed down:(BOOL)downArrowPressed escapeKey:(BOOL)escapeKeyPressed validKeys:(NSArray<NSString*>*)validKeys {
   NSString *keyToReturn = key;
 
   // Allow the flexibility of defining special keys in multiple ways
   BOOL enterKeyValidityCheck = [key isEqualToString:@"\r"] && ([validKeys containsObject:@"Enter"] || [validKeys containsObject:@"\r"]);
-  BOOL tabKeyValidityCheck = tabKeyPressed && ([validKeys containsObject:@"Tab"]); // tab has to be checked via a key code so we can't just use the key itself here
   BOOL escapeKeyValidityCheck = escapeKeyPressed && ([validKeys containsObject:@"Esc"] || [validKeys containsObject:@"Escape"]); // escape has to be checked via a key code so we can't just use the key itself here
   BOOL leftArrowValidityCheck = [validKeys containsObject:leftArrowPressKey] && leftArrowPressed;
   BOOL rightArrowValidityCheck = [validKeys containsObject:rightArrowPressKey] && rightArrowPressed;
   BOOL upArrowValidityCheck = [validKeys containsObject:upArrowPressKey] && upArrowPressed;
   BOOL downArrowValidityCheck = [validKeys containsObject:downArrowPressKey] && downArrowPressed;
 
-if (tabKeyValidityCheck) {
-    keyToReturn = @"Tab";
-  } else if (escapeKeyValidityCheck) {
+  if (escapeKeyValidityCheck) {
     keyToReturn = @"Escape";
   } else if (enterKeyValidityCheck) {
     keyToReturn = @"Enter";
@@ -1741,7 +1742,7 @@ if (tabKeyValidityCheck) {
   } else if (![validKeys containsObject:key]) {
     keyToReturn = nil;
   }
-  
+
   return keyToReturn;
 }
 
